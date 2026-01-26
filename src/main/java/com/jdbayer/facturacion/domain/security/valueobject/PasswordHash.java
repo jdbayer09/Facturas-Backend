@@ -2,7 +2,7 @@ package com.jdbayer.facturacion.domain.security.valueobject;
 
 import java.util.Objects;
 
-public class PasswordHash {
+public final class PasswordHash {
 
     private final String value;
 

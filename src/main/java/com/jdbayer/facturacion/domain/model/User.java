@@ -15,32 +15,69 @@ public class User {
     private Name name;
     private Name lastName;
     private Email email;
-    private final PasswordHash pass;
+    private final PasswordHash passwordHash;
     private final Instant createdAt;
+    private Instant updatedAt;
+    private boolean active;
+
+    public User(
+            Name name,
+            Name lastName,
+            Email email,
+            PasswordHash passwordHash
+    ) {
+        this.id = UUID.randomUUID();
+        this.name = Objects.requireNonNull(name, "El nombre es obligatorio");
+        this.lastName = Objects.requireNonNull(lastName, "El apellido es obligatorio");
+        this.email = Objects.requireNonNull(email, "El email es obligatorio");
+        this.passwordHash = Objects.requireNonNull(passwordHash, "La contraseña es obligatoria");
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+        this.active = true;
+    }
 
     public User(
             UUID id,
             Name name,
             Name lastName,
             Email email,
-            PasswordHash pass,
-            Instant createdAt
+            PasswordHash passwordHash,
+            Instant createdAt,
+            Instant updatedAt,
+            boolean active
     ) {
         this.id = Objects.requireNonNull(id);
         this.name = Objects.requireNonNull(name);
         this.lastName = Objects.requireNonNull(lastName);
         this.email = Objects.requireNonNull(email);
-        this.pass = Objects.requireNonNull(pass);
+        this.passwordHash = Objects.requireNonNull(passwordHash);
         this.createdAt = Objects.requireNonNull(createdAt);
+        this.updatedAt = updatedAt != null ? updatedAt : createdAt;
+        this.active = active;
     }
 
+
     public void changeName(Name newName, Name newLastName) {
+        Objects.requireNonNull(newName, "El nuevo nombre es obligatorio");
+        Objects.requireNonNull(newLastName, "El nuevo apellido es obligatorio");
         this.name = newName;
         this.lastName = newLastName;
+        this.updatedAt = Instant.now();
     }
 
     public void changeEmail(Email newEmail) {
+        Objects.requireNonNull(newEmail, "El nuevo email es obligatorio");
         this.email = newEmail;
+        this.updatedAt = Instant.now();
     }
 
+    public void deactivate() {
+        this.active = false;
+        this.updatedAt = Instant.now();
+    }
+
+    public void activate() {
+        this.active = true;
+        this.updatedAt = Instant.now();
+    }
 }
