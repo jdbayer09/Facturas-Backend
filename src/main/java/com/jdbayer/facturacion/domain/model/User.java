@@ -21,22 +21,6 @@ public class User {
     private boolean active;
 
     public User(
-            Name name,
-            Name lastName,
-            Email email,
-            PasswordHash passwordHash
-    ) {
-        this.id = UUID.randomUUID();
-        this.name = Objects.requireNonNull(name, "El nombre es obligatorio");
-        this.lastName = Objects.requireNonNull(lastName, "El apellido es obligatorio");
-        this.email = Objects.requireNonNull(email, "El email es obligatorio");
-        this.passwordHash = Objects.requireNonNull(passwordHash, "La contraseña es obligatoria");
-        this.createdAt = Instant.now();
-        this.updatedAt = Instant.now();
-        this.active = true;
-    }
-
-    public User(
             UUID id,
             Name name,
             Name lastName,

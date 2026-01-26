@@ -14,10 +14,6 @@ spring:
     locations: classpath:db/migration
     driver-class-name: org.postgresql.Driver
 
-security:
-  bcrypt:
-    strength: ${BCRYPT_STRENGTH:12}
-
 server:
   port: 8080
 
