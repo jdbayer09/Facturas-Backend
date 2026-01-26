@@ -16,7 +16,7 @@ public interface  R2dbcUserRepository extends R2dbcRepository<UserEntity, UUID> 
      * @param email Email del usuario
      * @return Mono<UserEntity> con el usuario encontrado o vacío
      */
-    @Query("SELECT u FROM security.users WHERE email = :email")
+    @Query("SELECT * FROM security.users WHERE email = :email")
     Mono<UserEntity> findByEmail(String email);
 
     /**
