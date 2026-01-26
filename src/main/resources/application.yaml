@@ -1,3 +1,23 @@
 spring:
   application:
     name: Facturacion
+  r2dbc:
+    url: r2dbc:postgresql://${FACTUS_DB_HOST:localhost}:${FACTUS_DB_PORT:5432}/${FACTUS_DB_NAME:db_name}
+    username: ${FACTUS_DB_USER:}
+    password: ${FACTUS_DB_PASS:}
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://${FACTUS_DB_HOST:localhost}:${FACTUS_DB_PORT:5432}/${FACTUS_DB_NAME:db_name}
+    user: ${FACTUS_DB_USER:}
+    password: ${FACTUS_DB_PASS:}
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    driver-class-name: org.postgresql.Driver
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.jdbayer: DEBUG
