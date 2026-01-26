@@ -40,6 +40,24 @@ public class User {
         this.active = active;
     }
 
+    public static User create(
+            Name name,
+            Name lastName,
+            Email email,
+            PasswordHash passwordHash
+    ) {
+        return new User(
+                UUID.randomUUID(),
+                Objects.requireNonNull(name, "El nombre es obligatorio"),
+                Objects.requireNonNull(lastName, "El apellido es obligatorio"),
+                Objects.requireNonNull(email, "El email es obligatorio"),
+                Objects.requireNonNull(passwordHash, "La contraseña es obligatoria"),
+                Instant.now(),
+                Instant.now(),
+                true
+        );
+    }
+
     public void changeName(Name newName, Name newLastName) {
         Objects.requireNonNull(newName, "El nuevo nombre es obligatorio");
         Objects.requireNonNull(newLastName, "El nuevo apellido es obligatorio");
