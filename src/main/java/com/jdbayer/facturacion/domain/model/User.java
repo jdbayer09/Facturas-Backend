@@ -56,7 +56,6 @@ public class User {
         this.active = active;
     }
 
-
     public void changeName(Name newName, Name newLastName) {
         Objects.requireNonNull(newName, "El nuevo nombre es obligatorio");
         Objects.requireNonNull(newLastName, "El nuevo apellido es obligatorio");
@@ -79,5 +78,28 @@ public class User {
     public void activate() {
         this.active = true;
         this.updatedAt = Instant.now();
+    }
+
+    // IMPORTANTE: Para entidades, equals y hashCode basados en ID
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(id, user.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", email=" + email.value() +
+                ", active=" + active +
+                '}';
     }
 }
