@@ -1,7 +1,6 @@
 package com.jdbayer.facturacion.infrastructure.security;
 
 import com.jdbayer.facturacion.domain.security.PasswordEncoder;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -32,12 +31,9 @@ public class SecurityConfig implements PasswordEncoder {
      */
     private final BCryptPasswordEncoder encoder;
 
-    @Value("${security.bcrypt.strength:10}")
-    private int bcryptStrength;
-
     public SecurityConfig() {
         // Usando el strength por defecto (10)
-        this.encoder = new BCryptPasswordEncoder(bcryptStrength);
+        this.encoder = new BCryptPasswordEncoder();
     }
 
     /**
