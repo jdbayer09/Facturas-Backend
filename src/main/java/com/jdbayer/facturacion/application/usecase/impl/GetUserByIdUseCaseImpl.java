@@ -1,7 +1,7 @@
 package com.jdbayer.facturacion.application.usecase.impl;
 
 import com.jdbayer.facturacion.application.dto.response.UserResponse;
-import com.jdbayer.facturacion.application.mapper.UserMapper;
+import com.jdbayer.facturacion.application.mapper.UserDomainMapper;
 import com.jdbayer.facturacion.application.usecase.GetUserByIdUseCase;
 import com.jdbayer.facturacion.domain.exception.UserNotFoundException;
 import com.jdbayer.facturacion.domain.repository.UserRepository;
@@ -21,9 +21,9 @@ public class GetUserByIdUseCaseImpl implements GetUserByIdUseCase {
     private static final Logger log = LoggerFactory.getLogger(GetUserByIdUseCaseImpl.class);
 
     private final UserRepository userRepository;
-    private final UserMapper userMapper;
+    private final UserDomainMapper userMapper;
 
-    public GetUserByIdUseCaseImpl(UserRepository userRepository, UserMapper userMapper) {
+    public GetUserByIdUseCaseImpl(UserRepository userRepository, UserDomainMapper userMapper) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
     }

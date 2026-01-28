@@ -2,7 +2,7 @@ package com.jdbayer.facturacion.application.usecase.impl;
 
 import com.jdbayer.facturacion.application.dto.request.RegisterUserRequest;
 import com.jdbayer.facturacion.application.dto.response.UserResponse;
-import com.jdbayer.facturacion.application.mapper.UserMapper;
+import com.jdbayer.facturacion.application.mapper.UserDomainMapper;
 import com.jdbayer.facturacion.application.usecase.RegisterUserUseCase;
 import com.jdbayer.facturacion.domain.model.User;
 import com.jdbayer.facturacion.domain.model.valueobject.Email;
@@ -31,12 +31,12 @@ public class RegisterUserUseCaseImpl implements RegisterUserUseCase {
 
     private final UserRepository userRepository;
     private final UserDomainService userDomainService;
-    private final UserMapper userMapper;
+    private final UserDomainMapper userMapper;
 
     public RegisterUserUseCaseImpl(
             UserRepository userRepository,
             UserDomainService userDomainService,
-            UserMapper userMapper
+            UserDomainMapper userMapper
     ) {
         this.userRepository = userRepository;
         this.userDomainService = userDomainService;

@@ -10,7 +10,7 @@ import org.mapstruct.Mapping;
  * MapStruct genera la implementación automáticamente en tiempo de compilación.
  */
 @Mapper(componentModel = "spring")
-public interface UserMapper {
+public interface UserDomainMapper {
 
     /**
      * Convierte un User del dominio a UserResponse.
