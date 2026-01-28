@@ -2,7 +2,7 @@ package com.jdbayer.facturacion.application.usecase.impl;
 
 import com.jdbayer.facturacion.application.dto.request.UpdateUserRequest;
 import com.jdbayer.facturacion.application.dto.response.UserResponse;
-import com.jdbayer.facturacion.application.mapper.UserMapper;
+import com.jdbayer.facturacion.application.mapper.UserDomainMapper;
 import com.jdbayer.facturacion.application.usecase.UpdateUserUseCase;
 import com.jdbayer.facturacion.domain.exception.UserNotFoundException;
 import com.jdbayer.facturacion.domain.model.User;
@@ -29,12 +29,12 @@ public class UpdateUserUseCaseImpl implements UpdateUserUseCase {
 
     private final UserRepository userRepository;
     private final UserDomainService userDomainService;
-    private final UserMapper userMapper;
+    private final UserDomainMapper userMapper;
 
     public UpdateUserUseCaseImpl(
             UserRepository userRepository,
             UserDomainService userDomainService,
-            UserMapper userMapper
+            UserDomainMapper userMapper
     ) {
         this.userRepository = userRepository;
         this.userDomainService = userDomainService;

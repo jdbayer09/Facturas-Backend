@@ -5,6 +5,10 @@ spring:
     url: r2dbc:postgresql://${FACTUS_DB_HOST:localhost}:${FACTUS_DB_PORT:5432}/${FACTUS_DB_NAME:db_name}
     username: ${FACTUS_DB_USER:}
     password: ${FACTUS_DB_PASS:}
+    pool:
+      initial-size: 10
+      max-size: 20
+      max-idle-time: 30m
   flyway:
     enabled: true
     url: jdbc:postgresql://${FACTUS_DB_HOST:localhost}:${FACTUS_DB_PORT:5432}/${FACTUS_DB_NAME:db_name}
@@ -13,11 +17,64 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
     driver-class-name: org.postgresql.Driver
+    schemas: security,core
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: America/Bogota
+  web:
+    error:
+      include-message: always
+      include-binding-errors: always
+      include-stacktrace: on_param
 
+# Configuración del servidor
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
+# Configuración de logging
 logging:
   level:
     root: INFO
-    com.jdbayer: DEBUG
+    com.jdbayer.facturacion: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.r2dbc: DEBUG
+    io.r2dbc.postgresql: DEBUG
+  pattern:
+
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/application.log
+    max-size: 10MB
+    max-history: 30
+
+# Actuator endpoints (health, metrics, etc.)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: false  # Cambiar a true cuando se configure Prometheus
+
+# Información de la aplicación
+info:
+  app:
+    name: Sistema de Facturación
+    description: API REST para gestión de facturación electrónica
+    version: 1.0.0
+    encoding: UTF-8
+    java:
+      version: 21
+
+jwt:
+  secret: mi-super-secret-key-de-al-menos-256-bits-para-jwt-hs256-seguro
+  expiration: 86400000  # 24 horas
+  refresh-expiration: 604800000  # 7 días
+  header-prefix: "Bearer "
+  header-name: "Authorization"
