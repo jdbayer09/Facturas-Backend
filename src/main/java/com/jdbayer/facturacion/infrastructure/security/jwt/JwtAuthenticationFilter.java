@@ -1,5 +1,6 @@
 package com.jdbayer.facturacion.infrastructure.security.jwt;
 
+import com.jdbayer.facturacion.domain.exception.UserNotFoundException;
 import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,8 +67,7 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .flatMap(authentication ->
                         chain.filter(exchange)
                                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication))
-                )
-                .switchIfEmpty(chain.filter(exchange));
+                );
     }
 
     /**
@@ -77,7 +77,7 @@ public class JwtAuthenticationFilter implements WebFilter {
         return Mono.fromCallable(() -> {
             if (!jwtService.validateToken(token)) {
                 log.warn("Token JWT inválido o expirado");
-                return null;
+                throw new IllegalStateException("Invalid JWT");
             }
 
             // Extraer información del usuario del token

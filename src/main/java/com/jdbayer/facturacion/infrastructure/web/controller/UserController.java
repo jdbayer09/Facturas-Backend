@@ -190,7 +190,7 @@ public class UserController {
      *
      * Ejemplo de response: 204 NO CONTENT
      */
-    @PutMapping("/{id}/activate")
+    @PatchMapping("/{id}/activate")
     public Mono<ResponseEntity<Void>> activateUser(@PathVariable UUID id) {
         log.info("Activando usuario: {}", id);
 
