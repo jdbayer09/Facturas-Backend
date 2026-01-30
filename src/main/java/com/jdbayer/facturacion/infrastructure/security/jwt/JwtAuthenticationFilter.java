@@ -1,5 +1,8 @@
 package com.jdbayer.facturacion.infrastructure.security.jwt;
 
+import com.jdbayer.facturacion.domain.exception.UserNotFoundException;
+import com.jdbayer.facturacion.infrastructure.security.service.TokenManagementService;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,24 +25,30 @@ import java.util.UUID;
  *
  * Este filtro se ejecuta en cada request y:
  * 1. Extrae el token JWT del header Authorization
- * 2. Valida el token
- * 3. Extrae la información del usuario
- * 4. Establece el contexto de seguridad de Spring
+ * 2. Verifica que no esté en la blacklist (logout)
+ * 3. Valida el token
+ * 4. Extrae la información del usuario
+ * 5. Establece el contexto de seguridad de Spring
  *
  * Flujo:
- * Request → JwtAuthenticationFilter → Validar Token → Set SecurityContext → Controller
+ * Request → JwtAuthenticationFilter → Blacklist Check → Validar Token → Set SecurityContext → Controller
  */
 @Component
+@Slf4j
 public class JwtAuthenticationFilter implements WebFilter {
-
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
+    private final TokenManagementService tokenManagementService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, JwtProperties jwtProperties) {
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            JwtProperties jwtProperties,
+            TokenManagementService tokenManagementService
+    ) {
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
+        this.tokenManagementService = tokenManagementService;
     }
 
     @Override
@@ -66,44 +75,52 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .flatMap(authentication ->
                         chain.filter(exchange)
                                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication))
-                )
-                .switchIfEmpty(chain.filter(exchange));
+                );
     }
 
     /**
      * Valida el token y crea el objeto Authentication.
+     *
+     * Ahora también verifica que el token no esté en la blacklist.
      */
     private Mono<UsernamePasswordAuthenticationToken> validateAndSetAuthentication(String token) {
-        return Mono.fromCallable(() -> {
-            if (!jwtService.validateToken(token)) {
-                log.warn("Token JWT inválido o expirado");
-                return null;
-            }
+        // Primero verificar si el token está blacklisted
+        return tokenManagementService.isTokenBlacklisted(token)
+                .flatMap(isBlacklisted -> {
+                    if (isBlacklisted) {
+                        log.warn("Token JWT está en la blacklist (logout)");
+                        return Mono.empty();
+                    }
 
-            // Extraer información del usuario del token
-            UUID userId = jwtService.extractUserId(token);
-            String email = jwtService.extractEmail(token);
+                    // Continuar con validación normal
+                    return Mono.fromCallable(() -> {
+                        if (!jwtService.validateToken(token)) {
+                            log.warn("Token JWT inválido o expirado");
+                            throw new IllegalStateException("Invalid JWT");
+                        }
 
-            log.debug("Token JWT válido para usuario: {} ({})", email, userId);
+                        // Extraer información del usuario del token
+                        UUID userId = jwtService.extractUserId(token);
+                        String email = jwtService.extractEmail(token);
 
-            // Crear Authentication con autoridades
-            // Por ahora, todos tienen rol USER
-            // Más adelante se pueden extraer roles del token o BD
-            var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+                        log.debug("Token JWT válido para usuario: {} ({})", email, userId);
 
-            // Crear objeto de autenticación
-            // Principal: userId (puede ser un objeto UserDetails personalizado)
-            // Credentials: token (no se usa típicamente)
-            // Authorities: roles/permisos
-            return new UsernamePasswordAuthenticationToken(
-                    userId,
-                    token,
-                    authorities
-            );
-        }).onErrorResume(e -> {
-            log.error("Error al procesar token JWT: {}", e.getMessage());
-            return Mono.empty();
-        });
+                        // Crear Authentication con autoridades
+                        var authorities = Collections.singletonList(
+                                new SimpleGrantedAuthority("ROLE_USER")
+                        );
+
+                        return new UsernamePasswordAuthenticationToken(
+                                userId,
+                                token,
+                                authorities
+                        );
+                    });
+                })
+                .onErrorResume(e -> {
+                    log.error("Error al procesar token JWT: {}", e.getMessage());
+                    return Mono.empty();
+                });
     }
 
     /**

@@ -7,6 +7,7 @@ import com.jdbayer.facturacion.application.usecase.LoginUseCase;
 import com.jdbayer.facturacion.domain.model.valueobject.Email;
 import com.jdbayer.facturacion.domain.service.UserDomainService;
 import com.jdbayer.facturacion.infrastructure.security.jwt.JwtService;
+import com.jdbayer.facturacion.infrastructure.security.service.TokenManagementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,8 @@ import reactor.core.publisher.Mono;
  * Orquesta:
  * 1. Autenticación del usuario (UserDomainService)
  * 2. Generación del token JWT (JwtService)
- * 3. Mapeo a DTO de respuesta
+ * 3. Generación del refresh token (TokenManagementService)
+ * 4. Mapeo a DTO de respuesta
  */
 @Service
 public class LoginUseCaseImpl implements LoginUseCase {
@@ -28,15 +30,18 @@ public class LoginUseCaseImpl implements LoginUseCase {
     private final UserDomainService userDomainService;
     private final UserDomainMapper userMapper;
     private final JwtService jwtService;
+    private final TokenManagementService tokenManagementService;
 
     public LoginUseCaseImpl(
             UserDomainService userDomainService,
             UserDomainMapper userMapper,
-            JwtService jwtService
+            JwtService jwtService,
+            TokenManagementService tokenManagementService
     ) {
         this.userDomainService = userDomainService;
         this.userMapper = userMapper;
         this.jwtService = jwtService;
+        this.tokenManagementService = tokenManagementService;
     }
 
     @Override
@@ -46,11 +51,20 @@ public class LoginUseCaseImpl implements LoginUseCase {
         return Mono.fromCallable(() -> new Email(request.email()))
                 .flatMap(email -> userDomainService.authenticateUser(email, request.password()))
                 .flatMap(user -> {
-                    // Generar token JWT real
+                    // Generar access token JWT real
                     String token = jwtService.generateToken(user);
 
-                    var userResponse = userMapper.toResponse(user);
-                    return Mono.just(new AuthResponse(token, userResponse));
+                    // Generar refresh token
+                    // TODO: Obtener IP y User-Agent del request
+                    return tokenManagementService.createRefreshToken(
+                            user,
+                            "unknown", // IP address - se obtendrá del controller
+                            "unknown"  // User agent - se obtendrá del controller
+                    ).flatMap(refreshToken -> {
+                        var userResponse = userMapper.toResponse(user);
+                        var authResponse = new AuthResponse(token, refreshToken, userResponse);
+                        return Mono.just(authResponse);
+                    });
                 })
                 .doOnSuccess(response -> log.info("Usuario autenticado exitosamente: {}", response.user().email()))
                 .doOnError(error -> log.error("Error al autenticar usuario: {}", error.getMessage()));
