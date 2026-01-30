@@ -1,18 +1,24 @@
 package com.jdbayer.facturacion.infrastructure.web.controller;
 
 import com.jdbayer.facturacion.application.dto.request.LoginRequest;
+import com.jdbayer.facturacion.application.dto.request.RefreshTokenRequest;
 import com.jdbayer.facturacion.application.dto.request.RegisterUserRequest;
 import com.jdbayer.facturacion.application.dto.response.AuthResponse;
 import com.jdbayer.facturacion.application.dto.response.UserResponse;
 import com.jdbayer.facturacion.application.usecase.LoginUseCase;
+import com.jdbayer.facturacion.application.usecase.LogoutUseCase;
+import com.jdbayer.facturacion.application.usecase.RefreshTokenUseCase;
 import com.jdbayer.facturacion.application.usecase.RegisterUserUseCase;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+
+import java.util.UUID;
 
 /**
  * Controlador REST para endpoints de autenticación.
@@ -20,24 +26,32 @@ import reactor.core.publisher.Mono;
  * Endpoints:
  * - POST /api/auth/register - Registro de nuevos usuarios
  * - POST /api/auth/login - Autenticación de usuarios
+ * - POST /api/auth/refresh - Renovar access token
+ * - POST /api/auth/logout - Cerrar sesión
  *
- * Estos endpoints son públicos (no requieren autenticación).
+ * Los endpoints de register, login y refresh son públicos.
+ * El endpoint de logout requiere autenticación.
  */
 @RestController
 @RequestMapping("/api/auth")
+@Slf4j
 public class AuthController {
-
-    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final RegisterUserUseCase registerUserUseCase;
     private final LoginUseCase loginUseCase;
+    private final RefreshTokenUseCase refreshTokenUseCase;
+    private final LogoutUseCase logoutUseCase;
 
     public AuthController(
             RegisterUserUseCase registerUserUseCase,
-            LoginUseCase loginUseCase
+            LoginUseCase loginUseCase,
+            RefreshTokenUseCase refreshTokenUseCase,
+            LogoutUseCase logoutUseCase
     ) {
         this.registerUserUseCase = registerUserUseCase;
         this.loginUseCase = loginUseCase;
+        this.refreshTokenUseCase = refreshTokenUseCase;
+        this.logoutUseCase = logoutUseCase;
     }
 
     /**
@@ -75,9 +89,7 @@ public class AuthController {
                         .status(HttpStatus.CREATED)
                         .body(userResponse))
                 .doOnSuccess(response ->
-                {
-                    log.info("Usuario registrado exitosamente: {}", response.getBody().email());
-                });
+                        log.info("Usuario registrado exitosamente: {}", response.getBody().email()));
     }
 
     /**
@@ -121,39 +133,96 @@ public class AuthController {
     /**
      * Endpoint para renovar el token de acceso usando un refresh token.
      *
-     * NOTA: Este endpoint está preparado para implementación futura.
-     * Requiere implementar RefreshTokenUseCase.
-     *
      * @param request Refresh token
-     * @return 200 OK con nuevo token JWT
+     * @param httpRequest Request HTTP (para obtener IP y User-Agent)
+     * @return 200 OK con nuevo access token y refresh token
+     *
+     * Ejemplo de request:
+     * POST /api/auth/refresh
+     * {
+     *   "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+     * }
+     *
+     * Ejemplo de response (200 OK):
+     * {
+     *   "token": "eyJhbGciOiJIUzI1NiIs...",
+     *   "tokenType": "Bearer",
+     *   "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+     *   "user": {
+     *     "id": "123e4567-e89b-12d3-a456-426614174000",
+     *     "name": "JUAN",
+     *     "email": "juan@example.com"
+     *   }
+     * }
      */
-    /*
     @PostMapping("/refresh")
-    public Mono<ResponseEntity<AuthResponse>> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+    public Mono<ResponseEntity<AuthResponse>> refreshToken(
+            @Valid @RequestBody RefreshTokenRequest request,
+            ServerHttpRequest httpRequest
+    ) {
         log.info("Solicitud de refresh token recibida");
 
-        return refreshTokenUseCase.execute(request)
-                .map(authResponse -> ResponseEntity
-                        .ok()
-                        .body(authResponse));
+        String ipAddress = extractIpAddress(httpRequest);
+        String userAgent = extractUserAgent(httpRequest);
+
+        return refreshTokenUseCase.execute(request, ipAddress, userAgent)
+                .map(ResponseEntity::ok)
+                .doOnSuccess(response ->
+                        log.info("Tokens renovados exitosamente"));
     }
-    */
 
     /**
-     * Endpoint para cerrar sesión (invalidar token).
+     * Endpoint para cerrar sesión (logout).
      *
-     * NOTA: Este endpoint está preparado para implementación futura.
-     * Requiere implementar un mecanismo de blacklist de tokens.
+     * Invalida el token actual agregándolo a la blacklist.
      *
+     * @param authentication Autenticación del usuario (inyectada automáticamente)
+     * @param authHeader Header Authorization
+     * @param httpRequest Request HTTP (para obtener IP)
      * @return 204 NO CONTENT
+     *
+     * Ejemplo de request:
+     * POST /api/auth/logout
+     * Header: Authorization: Bearer <token>
+     *
+     * Ejemplo de response: 204 NO CONTENT
      */
-    /*
     @PostMapping("/logout")
-    public Mono<ResponseEntity<Void>> logout(@RequestHeader("Authorization") String authHeader) {
-        log.info("Solicitud de logout recibida");
+    public Mono<ResponseEntity<Void>> logout(
+            Authentication authentication,
+            @RequestHeader("Authorization") String authHeader,
+            ServerHttpRequest httpRequest
+    ) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        log.info("Solicitud de logout recibida para usuario: {}", userId);
 
-        return logoutUseCase.execute(authHeader)
-                .then(Mono.just(ResponseEntity.noContent().build()));
+        // Extraer token del header "Bearer <token>"
+        String token = authHeader.substring(7);
+        String ipAddress = extractIpAddress(httpRequest);
+
+        return logoutUseCase.execute(token, userId, ipAddress)
+                .then(Mono.just(ResponseEntity.noContent().<Void>build()))
+                .doOnSuccess(v -> log.info("Logout exitoso para usuario: {}", userId));
     }
-    */
+
+    /**
+     * Extrae la dirección IP del request.
+     */
+    private String extractIpAddress(ServerHttpRequest request) {
+        String xForwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+
+        var remoteAddress = request.getRemoteAddress();
+        return remoteAddress != null ? remoteAddress.getAddress().getHostAddress() : "unknown";
+    }
+
+    /**
+     * Extrae el User-Agent del request.
+     */
+    private String extractUserAgent(ServerHttpRequest request) {
+        String userAgent = request.getHeaders().getFirst("User-Agent");
+        return userAgent != null ? userAgent : "unknown";
+    }
 }
