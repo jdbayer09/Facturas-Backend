@@ -1,10 +1,15 @@
-package com.jdbayer.facturacion.infrastructure.security.token;
+package com.jdbayer.facturacion.infrastructure.persistence.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -14,66 +19,73 @@ import java.util.UUID;
  * Cuando un usuario hace logout, su token se agrega a esta blacklist
  * para prevenir su uso hasta que expire naturalmente.
  *
- * Se almacena en Redis porque:
- * - Es temporal (solo hasta que el token expire)
- * - Necesita acceso muy rápido (se verifica en cada request)
- * - No requiere persistencia permanente
- *
- * La blacklist se limpia automáticamente cuando los tokens expiran
- * gracias al TTL de Redis.
- *
- * NOTA: No usa @RedisHash porque usamos ReactiveRedisTemplate directamente.
+ * Migrado de Redis a PostgreSQL para simplificar la infraestructura.
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class BlacklistedToken {
+@Table(name = "blacklisted_tokens", schema = "security")
+public class BlacklistedTokenEntity implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * ID único del token (el token JWT mismo).
      */
+    @Id
+    @Column("token")
     private String token;
 
     /**
      * ID del usuario que hizo logout.
      */
+    @Column("user_id")
     private UUID userId;
 
     /**
      * Email del usuario (para logging).
      */
+    @Column("email")
     private String email;
 
     /**
      * Fecha y hora del logout.
      */
+    @Column("blacklisted_at")
     private Instant blacklistedAt;
 
     /**
      * Razón de la invalidación.
      * Puede ser: "logout", "security_breach", "password_change", etc.
      */
+    @Column("reason")
     private String reason;
 
     /**
      * IP desde donde se hizo el logout.
      */
+    @Column("ip_address")
     private String ipAddress;
 
     /**
-     * TTL dinámico en segundos.
-     * Redis eliminará automáticamente este registro cuando el token expire.
+     * Fecha de expiración del token.
+     * Útil para limpiezas periódicas.
      */
-    private Long ttl;
+    @Column("expires_at")
+    private Instant expiresAt;
 
-    public BlacklistedToken(
+    /**
+     * Constructor para crear un nuevo token blacklisted.
+     */
+    public BlacklistedTokenEntity(
             String token,
             UUID userId,
             String email,
             String reason,
             String ipAddress,
-            Long ttl
+            Instant expiresAt
     ) {
         this.token = token;
         this.userId = userId;
@@ -81,6 +93,6 @@ public class BlacklistedToken {
         this.blacklistedAt = Instant.now();
         this.reason = reason;
         this.ipAddress = ipAddress;
-        this.ttl = ttl;
+        this.expiresAt = expiresAt;
     }
 }
