@@ -1,12 +1,12 @@
 package com.jdbayer.facturacion.infrastructure.security.service;
 
 import com.jdbayer.facturacion.domain.model.User;
+import com.jdbayer.facturacion.infrastructure.persistence.entity.BlacklistedTokenEntity;
+import com.jdbayer.facturacion.infrastructure.persistence.entity.RefreshTokenEntity;
+import com.jdbayer.facturacion.infrastructure.persistence.repository.R2dbcBlacklistedTokenRepository;
+import com.jdbayer.facturacion.infrastructure.persistence.repository.R2dbcRefreshTokenRepository;
 import com.jdbayer.facturacion.infrastructure.security.jwt.JwtProperties;
 import com.jdbayer.facturacion.infrastructure.security.jwt.JwtService;
-import com.jdbayer.facturacion.infrastructure.security.repository.BlacklistedTokenRepository;
-import com.jdbayer.facturacion.infrastructure.security.repository.RefreshTokenRepository;
-import com.jdbayer.facturacion.infrastructure.security.token.BlacklistedToken;
-import com.jdbayer.facturacion.infrastructure.security.token.RefreshToken;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -16,7 +16,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Servicio para gestión de tokens JWT.
+ * Servicio para gestión de tokens JWT usando PostgreSQL.
+ *
+ * Migrado de Redis a PostgreSQL para simplificar la infraestructura.
  *
  * Responsabilidades:
  * - Crear y validar refresh tokens
@@ -28,14 +30,14 @@ import java.util.UUID;
 @Slf4j
 public class TokenManagementService {
 
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final BlacklistedTokenRepository blacklistedTokenRepository;
+    private final R2dbcRefreshTokenRepository refreshTokenRepository;
+    private final R2dbcBlacklistedTokenRepository blacklistedTokenRepository;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
 
     public TokenManagementService(
-            RefreshTokenRepository refreshTokenRepository,
-            BlacklistedTokenRepository blacklistedTokenRepository,
+            R2dbcRefreshTokenRepository refreshTokenRepository,
+            R2dbcBlacklistedTokenRepository blacklistedTokenRepository,
             JwtService jwtService,
             JwtProperties jwtProperties
     ) {
@@ -46,7 +48,7 @@ public class TokenManagementService {
     }
 
     /**
-     * Crea y almacena un nuevo refresh token en Redis.
+     * Crea y almacena un nuevo refresh token en PostgreSQL.
      *
      * @param user Usuario para el cual crear el token
      * @param ipAddress IP del cliente
@@ -63,8 +65,8 @@ public class TokenManagementService {
         Instant expiresAt = Instant.now()
                 .plusMillis(jwtProperties.getRefreshExpiration());
 
-        // Crear entidad RefreshToken para Redis
-        RefreshToken refreshToken = new RefreshToken(
+        // Crear entidad RefreshToken
+        RefreshTokenEntity refreshToken = new RefreshTokenEntity(
                 token,
                 user.getId(),
                 user.getEmail().value(),
@@ -73,12 +75,12 @@ public class TokenManagementService {
                 userAgent
         );
 
-        // Guardar en Redis (ahora reactivo)
+        // Guardar en PostgreSQL
         return refreshTokenRepository.save(refreshToken)
                 .doOnSuccess(saved ->
                         log.info("Refresh token creado para usuario: {}", user.getEmail().value())
                 )
-                .map(RefreshToken::getToken);
+                .map(RefreshTokenEntity::getToken);
     }
 
     /**
@@ -87,10 +89,10 @@ public class TokenManagementService {
      * @param token Refresh token a validar
      * @return Mono con el refresh token si es válido, error si no
      */
-    public Mono<RefreshToken> validateAndUseRefreshToken(String token) {
+    public Mono<RefreshTokenEntity> validateAndUseRefreshToken(String token) {
         log.debug("Validando refresh token");
 
-        // Buscar el token en Redis (ahora es reactivo)
+        // Buscar el token en PostgreSQL
         return refreshTokenRepository.findById(token)
                 .switchIfEmpty(Mono.error(
                         new IllegalArgumentException("Refresh token inválido o expirado")
@@ -106,7 +108,7 @@ public class TokenManagementService {
                     }
 
                     // Verificar que no haya sido usado (detectar reutilización)
-                    if (refreshToken.isUsed()) {
+                    if (Boolean.TRUE.equals(refreshToken.getUsed())) {
                         log.error("Intento de reutilización de refresh token para usuario: {}",
                                 refreshToken.getEmail());
                         // Invalidar TODOS los refresh tokens del usuario por seguridad
@@ -125,9 +127,9 @@ public class TokenManagementService {
                                 ));
                     }
 
-                    // Marcar como usado y guardar
-                    refreshToken.markAsUsed();
-                    return refreshTokenRepository.save(refreshToken)
+                    // Marcar como usado
+                    return refreshTokenRepository.markAsUsed(token, Instant.now())
+                            .then(refreshTokenRepository.findById(token))
                             .doOnSuccess(saved ->
                                     log.info("Refresh token validado y usado para usuario: {}",
                                             saved.getEmail())
@@ -153,20 +155,20 @@ public class TokenManagementService {
     ) {
         log.debug("Agregando token a blacklist para usuario: {}", email);
 
-        // Calcular TTL basado en la expiración del token
-        long ttl = calculateTokenTTL(token);
+        // Calcular fecha de expiración del token
+        Instant expiresAt = calculateTokenExpiration(token);
 
         // Crear entrada en blacklist
-        BlacklistedToken blacklistedToken = new BlacklistedToken(
+        BlacklistedTokenEntity blacklistedToken = new BlacklistedTokenEntity(
                 token,
                 userId,
                 email,
                 reason,
                 ipAddress,
-                ttl
+                expiresAt
         );
 
-        // Guardar en Redis (ahora reactivo)
+        // Guardar en PostgreSQL
         return blacklistedTokenRepository.save(blacklistedToken)
                 .doOnSuccess(saved ->
                         log.info("Token blacklisted para usuario: {} - Razón: {}", email, reason)
@@ -181,7 +183,7 @@ public class TokenManagementService {
      * @return Mono<Boolean> - true si está blacklisted
      */
     public Mono<Boolean> isTokenBlacklisted(String token) {
-        return blacklistedTokenRepository.existsById(token);
+        return blacklistedTokenRepository.existsByToken(token);
     }
 
     /**
@@ -198,11 +200,12 @@ public class TokenManagementService {
     public Mono<Void> invalidateAllUserTokens(UUID userId, String reason) {
         log.warn("Invalidando TODOS los tokens del usuario: {} - Razón: {}", userId, reason);
 
-        // Eliminar todos los refresh tokens (ahora reactivo)
+        // Eliminar todos los refresh tokens
         return refreshTokenRepository.deleteByUserId(userId)
-                .doOnSuccess(v ->
-                        log.info("Todos los tokens invalidados para usuario: {}", userId)
-                );
+                .doOnSuccess(count ->
+                        log.info("Eliminados {} refresh tokens para usuario: {}", count, userId)
+                )
+                .then();
     }
 
     /**
@@ -211,8 +214,9 @@ public class TokenManagementService {
      * @param userId ID del usuario
      * @return Flux de refresh tokens activos
      */
-    public Flux<RefreshToken> getUserActiveSessions(UUID userId) {
-        return refreshTokenRepository.findByUserId(userId);
+    public Flux<RefreshTokenEntity> getUserActiveSessions(UUID userId) {
+        return refreshTokenRepository.findByUserId(userId)
+                .filter(token -> !token.isExpired());
     }
 
     /**
@@ -222,7 +226,7 @@ public class TokenManagementService {
      * @return Mono con el número de sesiones activas
      */
     public Mono<Long> countUserActiveSessions(UUID userId) {
-        return refreshTokenRepository.countByUserId(userId);
+        return refreshTokenRepository.countActiveByUserId(userId, Instant.now());
     }
 
     /**
@@ -236,19 +240,17 @@ public class TokenManagementService {
     }
 
     /**
-     * Calcula el TTL restante de un token JWT en segundos.
+     * Calcula la fecha de expiración de un token JWT.
      */
-    private long calculateTokenTTL(String token) {
+    private Instant calculateTokenExpiration(String token) {
         try {
-            Instant expiration = Instant.ofEpochMilli(
+            return Instant.ofEpochMilli(
                     jwtService.extractAllClaims(token).getExpiration().getTime()
             );
-            long ttl = expiration.getEpochSecond() - Instant.now().getEpochSecond();
-            return Math.max(ttl, 0);
         } catch (Exception e) {
-            log.error("Error al calcular TTL del token: {}", e.getMessage());
+            log.error("Error al calcular expiración del token: {}", e.getMessage());
             // Si no podemos calcular, usar el tiempo máximo de expiración
-            return jwtProperties.getExpiration() / 1000;
+            return Instant.now().plusMillis(jwtProperties.getExpiration());
         }
     }
 
@@ -256,11 +258,23 @@ public class TokenManagementService {
      * Limpia refresh tokens expirados.
      * Este método puede ser llamado por un scheduler periódico.
      */
-    public Mono<Void> cleanupExpiredTokens() {
-        return Mono.fromRunnable(() -> {
-            log.info("Limpiando refresh tokens expirados...");
-            // Redis hace esto automáticamente con TTL, pero podemos agregar
-            // lógica adicional aquí si es necesario
-        });
+    public Mono<Integer> cleanupExpiredRefreshTokens() {
+        log.info("Limpiando refresh tokens expirados...");
+        return refreshTokenRepository.deleteExpiredTokens(Instant.now())
+                .doOnSuccess(count ->
+                        log.info("Eliminados {} refresh tokens expirados", count)
+                );
+    }
+
+    /**
+     * Limpia tokens expirados de la blacklist.
+     * Este método puede ser llamado por un scheduler periódico.
+     */
+    public Mono<Integer> cleanupExpiredBlacklistedTokens() {
+        log.info("Limpiando tokens expirados de la blacklist...");
+        return blacklistedTokenRepository.deleteExpiredTokens(Instant.now())
+                .doOnSuccess(count ->
+                        log.info("Eliminados {} tokens expirados de la blacklist", count)
+                );
     }
 }
