@@ -1,11 +1,9 @@
 package com.jdbayer.facturacion.infrastructure.security.token;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
-import org.springframework.data.redis.core.TimeToLive;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -23,17 +21,18 @@ import java.util.UUID;
  *
  * La blacklist se limpia automáticamente cuando los tokens expiran
  * gracias al TTL de Redis.
+ *
+ * NOTA: No usa @RedisHash porque usamos ReactiveRedisTemplate directamente.
  */
 @Getter
 @Setter
 @NoArgsConstructor
-@RedisHash(value = "blacklisted_token", timeToLive = 86400) // 24 horas en segundos
+@AllArgsConstructor
 public class BlacklistedToken {
 
     /**
      * ID único del token (el token JWT mismo).
      */
-    @Id
     private String token;
 
     /**
@@ -66,7 +65,6 @@ public class BlacklistedToken {
      * TTL dinámico en segundos.
      * Redis eliminará automáticamente este registro cuando el token expire.
      */
-    @TimeToLive
     private Long ttl;
 
     public BlacklistedToken(

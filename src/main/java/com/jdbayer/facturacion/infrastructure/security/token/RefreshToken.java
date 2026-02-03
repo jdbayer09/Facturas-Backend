@@ -1,12 +1,9 @@
 package com.jdbayer.facturacion.infrastructure.security.token;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
-import org.springframework.data.redis.core.TimeToLive;
-import org.springframework.data.redis.core.index.Indexed;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -22,25 +19,22 @@ import java.util.UUID;
  * - Necesitan acceso rápido
  * - No requieren persistencia permanente
  *
- * @RedisHash: Indica que esta entidad se almacena en Redis
+ * NOTA: No usa @RedisHash porque usamos ReactiveRedisTemplate directamente.
  */
 @Getter
 @Setter
 @NoArgsConstructor
-@RedisHash(value = "refresh_token", timeToLive = 604800) // 7 días en segundos
+@AllArgsConstructor
 public class RefreshToken {
 
     /**
      * ID único del refresh token (el token JWT mismo).
      */
-    @Id
     private String token;
 
     /**
      * ID del usuario al que pertenece este token.
-     * Indexed para poder buscar por userId.
      */
-    @Indexed
     private UUID userId;
 
     /**
@@ -82,7 +76,6 @@ public class RefreshToken {
      * TTL dinámico en segundos.
      * Redis eliminará automáticamente este token cuando expire.
      */
-    @TimeToLive
     private Long ttl;
 
     public RefreshToken(
